@@ -4,4 +4,3 @@ terraform {
     key    = "github-actions-demo.tfstate"
     region = "ap-northeast-2"
   }
-}

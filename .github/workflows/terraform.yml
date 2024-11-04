@@ -7,10 +7,6 @@ on:
 jobs:
   terraform:
     name: 'Terraform'
-    env:
-      # AWS secrets
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-latest
     environment: production
 
@@ -18,6 +14,14 @@ jobs:
       # Checkout the repository to the GitHub Actions runner
       - name: Checkout
         uses: actions/checkout@v4
+
+        # Configure AWS credentials for the workflow
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: "ap-northeast-2"  # Update to your region
 
       # Initialize a new or existing Terraform working directory
       - name: Terraform Init
@@ -48,5 +52,6 @@ jobs:
           tf_actions_working_dir: "."
           tf_actions_comment: true
           args: '-auto-approve -var="instance_type=t2.medium"'
+    
         
 

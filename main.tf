@@ -18,6 +18,24 @@ resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
 
+  user_data = <<-EOF
+              #!/bin/bash
+              # Update and upgrade the system
+              sudo apt update -y && sudo apt upgrade -y
+
+              # Install Java Development Kit (JDK)
+              sudo apt install openjdk-11-jdk -y
+
+              # Install Node.js and npm
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt install -y nodejs
+
+              # Verify installations
+              java -version
+              node -v
+              npm -v
+              EOF
+
   tags = {
     Name = "Hello"
   }

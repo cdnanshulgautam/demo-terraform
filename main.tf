@@ -37,6 +37,7 @@ resource "aws_security_group" "allow_ssh" {
 resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
+  count = 700  # Creates 1000 instances
   key_name = "l2"
   security_groups = [aws_security_group.allow_ssh.name]  # Attach the security group here
 
@@ -59,6 +60,6 @@ resource "aws_instance" "web" {
               EOF
 
   tags = {
-    Name = "Hello"
+    Name = "Hello-${count.index}"
   }
 }

@@ -68,6 +68,7 @@ resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t2.micro" #user input
   key_name = "l2"
+  availability_zone = "ap-northeast-2a"
   security_groups = [aws_security_group.allow_ssh.name]  # Attach the security group here
   iam_instance_profile = aws_iam_instance_profile.ec2_instance_profile.name  # Attach IAM role here
 

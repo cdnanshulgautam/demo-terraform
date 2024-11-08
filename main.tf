@@ -38,7 +38,6 @@ resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t2.micro" #user input
   key_name = "l2"
-  availability_zone = "ap-northeast-2"
   security_groups = [aws_security_group.allow_ssh.name]  # Attach the security group here
 
   user_data = <<-EOF

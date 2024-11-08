@@ -31,7 +31,7 @@ jobs:
           tf_actions_subcommand: "init"
           tf_actions_working_dir: "."
           tf_actions_comment: true
-          args: '-var="instance_type=t2.medium"'
+          args: '-var="instance_type=t2.micro"'
 
       # Run Terraform plan
       - name: Terraform plan
@@ -41,7 +41,7 @@ jobs:
           tf_actions_subcommand: "plan"
           tf_actions_working_dir: "."
           tf_actions_comment: true
-          args: '-var="instance_type=t2.medium"'
+          args: '-var="instance_type=t2.micro"'
 
       # Run Terraform apply
       - name: Terraform apply
@@ -51,7 +51,7 @@ jobs:
           tf_actions_subcommand: "apply"
           tf_actions_working_dir: "."
           tf_actions_comment: true
-          args: '-auto-approve -var="instance_type=t2.medium"'
+          args: '-auto-approve -var="instance_type=t2.micro"'
     
         
 

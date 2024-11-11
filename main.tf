@@ -69,7 +69,7 @@ resource "aws_iam_instance_profile" "ec2_instance_profile" {
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type  # User-defined instance type
-  key_name               = "l2"        # Ensure this key pair exists in your AWS account
+  key_name               = "test_key"        # Ensure this key pair exists in your AWS account
   security_groups        = [aws_security_group.allow_ssh.name]
   iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
 

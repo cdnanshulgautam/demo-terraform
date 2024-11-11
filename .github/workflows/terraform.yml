@@ -21,7 +21,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: "ap-northeast-1a"  # Update to your region
+          aws-region: "ap-northeast-1"  # Update to your region
 
       # Initialize a new or existing Terraform working directory
       - name: Terraform Init

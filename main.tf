@@ -15,29 +15,46 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical's AWS account
 }
 
+
+The errors you're encountering are related to:
+
+Security Group VPC Issue: The VPCIdNotSpecified error occurs because the security group requires an explicit VPC ID when there is no default VPC. If you don't have a default VPC in your account, you need to specify a VPC for the security group.
+
+IAM Role Already Exists: The EntityAlreadyExists error indicates that a role with the name EC2Role already exists in your IAM configuration.
+
+Here's how to address these issues:
+
+Solution 1: Specify a VPC ID for the Security Group
+If you already have a VPC, specify its ID when creating the security group. You can add a vpc_id attribute to the aws_security_group resource.
+
+Update your security group resource like this:
+
+hcl
+Copy code
 # Define a security group with SSH access
-resource "aws_security_group" "allow_ssh" {
-  name        = "allow_ssh"
+resource "aws_security_group" "allow_ssh_port" {
+  name        = "allow_ssh_port"
   description = "Allow SSH access from anywhere"
+  vpc_id      = "your-vpc-id"  # Replace "your-vpc-id" with your actual VPC ID
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allows SSH from any IP address
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]  # Allows all outbound traffic
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
 # Create IAM Role for EC2
-resource "aws_iam_role" "ec2_role" {
-  name = "EC2Role"
+resource "aws_iam_role" "ec2_role_one" {
+  name = "EC2Role_New"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -55,14 +72,14 @@ resource "aws_iam_role" "ec2_role" {
 
 # Attach a policy to the role (Example: AmazonEC2ReadOnlyAccess)
 resource "aws_iam_role_policy_attachment" "ec2_read_only" {
-  role       = aws_iam_role.ec2_role.name
+  role       = aws_iam_role.ec2_role_one.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
 }
 
 # Create an instance profile for the role
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "EC2InstanceProfile"
-  role = aws_iam_role.ec2_role.name
+  role = aws_iam_role.ec2_role_one.name
 }
 
 # Launch EC2 instance with user data and IAM instance profile
@@ -70,7 +87,7 @@ resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type  # User-defined instance type
   key_name               = "test_key"        # Ensure this key pair exists in your AWS account
-  security_groups        = [aws_security_group.allow_ssh.name]
+  security_groups        = [aws_security_group.allow_ssh_port.name]
   iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
 
   user_data = <<-EOF

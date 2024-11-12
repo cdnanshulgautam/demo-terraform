@@ -34,6 +34,15 @@ resource "aws_security_group" "allow_ssh" {
   }
 }
 
+# Create an EBS volume within the Free Tier limit
+resource "aws_ebs_volume" "external_disk" {
+  availability_zone = "ap-northeast-1a"
+  size              = 10  # Free Tier limit for EBS storage is up to 30 GiB
+  tags = {
+    Name = "ExternalDisk"
+  }
+}
+
 resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t2.micro"
@@ -59,4 +68,10 @@ resource "aws_instance" "web" {
   tags = {
     Name = "Hello"
   }
+}
+# Attach the EBS volume to the EC2 instance
+resource "aws_volume_attachment" "ebs_attachment" {
+  device_name = "/dev/sdh"
+  volume_id   = aws_ebs_volume.external_disk.id
+  instance_id = aws_instance.web.id
 }

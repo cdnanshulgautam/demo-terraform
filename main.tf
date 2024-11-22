@@ -1,3 +1,4 @@
+# Data source for Ubuntu AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -14,7 +15,7 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
-# Define initial volume sizes as variables
+# Initial volume sizes and size change variables
 variable "initial_root_size" {
   description = "Initial size of the root volume in GiB"
   type        = number
@@ -27,7 +28,6 @@ variable "initial_external_size" {
   default     = 10
 }
 
-# Define the size change in GiB
 variable "size_change" {
   description = "Amount of size to move from external to root volume in GiB"
   type        = number
@@ -40,56 +40,105 @@ locals {
   new_external_size = var.initial_external_size - var.size_change
 }
 
-# Define a security group with SSH access
+resource "aws_vpc" "ccVPC" {
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "ccVPC"
+  }
+}
+
+resource "aws_subnet" "public_subnet" {
+  vpc_id                  = aws_vpc.ccVPC.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "ap-northeast-1a"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "PublicSubnet"
+  }
+}
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id            = aws_vpc.ccVPC.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "ap-northeast-1a"
+
+  tags = {
+    Name = "PrivateSubnet"
+  }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.ccVPC.id
+
+  tags = {
+    Name = "InternetGateway"
+  }
+}
+
+resource "aws_route_table" "public_route_table" {
+  vpc_id = aws_vpc.ccVPC.id
+
+  route {
+    cidr_block = "0.0.0.0/0" # Allow internet traffic
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "PublicRouteTable"
+  }
+}
+
+
+resource "aws_route_table_association" "public_subnet_association" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public_route_table.id
+}
+
 resource "aws_security_group" "allow_ssh" {
   name        = "allow_ssh_new"
-  description = "Allow SSH access from anywhere"
+  description = "Allow SSH access"
+  vpc_id      = aws_vpc.ccVPC.id
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allows SSH from any IP address
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]  # Allows all outbound traffic
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
+# EC2 instance in public subnet
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.micro"  # Free Tier eligible instance type
-  key_name               = "test_key"
-  availability_zone      = "ap-northeast-1a"
-  security_groups        = [aws_security_group.allow_ssh.name]
+  instance_type          = var.instance_type
+  key_name               = "ec2_key"
+  subnet_id              = aws_subnet.public_subnet.id
+   vpc_security_group_ids = [aws_security_group.allow_ssh.id]
 
   root_block_device {
-    volume_size = local.new_root_size  # Adjusted dynamically
+    volume_size = local.new_root_size
     volume_type = "gp2"
   }
 
   user_data = <<-EOF
               #!/bin/bash
-              # Update and upgrade the system
               sudo apt update -y && sudo apt upgrade -y
-
-              # Install Java Development Kit (JDK)
               sudo apt install openjdk-11-jdk -y
-
-              # Install Node.js and npm
               curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
               sudo apt install -y nodejs
-
-              # Verify installations
               java -version
               node -v
               npm -v
-
-              # Format and mount the first external EBS volume if not already formatted
               if ! file -s /dev/xvdh | grep -q 'ext4'; then
                   sudo mkfs -t ext4 /dev/xvdh
               fi
@@ -98,7 +147,6 @@ resource "aws_instance" "web" {
               echo '/dev/xvdh /mnt/external_disk_1 ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
               sudo chown -R ubuntu:ubuntu /mnt/external_disk_1
               sudo chmod -R 755 /mnt/external_disk_1
-
               EOF
 
   tags = {
@@ -106,21 +154,34 @@ resource "aws_instance" "web" {
   }
 }
 
-# Create the first external EBS volume
+# External EBS volume
 resource "aws_ebs_volume" "external_disk_1" {
   availability_zone = "ap-northeast-1a"
-  size              = local.new_external_size  # Adjusted dynamically
+  size              = local.new_external_size
   tags = {
     Name = "ExternalDisk1"
   }
 }
 
-
-# Attach the first EBS volume to the EC2 instance
+# Attach the external EBS volume to the EC2 instance
 resource "aws_volume_attachment" "ebs_attachment_1" {
   device_name = "/dev/xvdh"
   volume_id   = aws_ebs_volume.external_disk_1.id
   instance_id = aws_instance.web.id
-  force_detach = true  # Force detach if it's attached elsewhere
+  force_detach = true
 }
 
+# DynamoDB table
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "terraform-state-lock"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+  tags = {
+    Name = "TerraformLocks"
+  }
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}

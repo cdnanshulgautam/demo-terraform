@@ -15,25 +15,6 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
-# Initial volume sizes and size change variables
-variable "initial_root_size" {
-  description = "Initial size of the root volume in GiB"
-  type        = number
-  default     = 8
-}
-
-variable "initial_external_size" {
-  description = "Initial size of the external volume in GiB"
-  type        = number
-  default     = 10
-}
-
-variable "size_change" {
-  description = "Amount of size to move from external to root volume in GiB"
-  type        = number
-  default     = 5
-}
-
 # Calculate new sizes
 locals {
   new_root_size     = var.initial_root_size + var.size_change
@@ -41,7 +22,7 @@ locals {
 }
 
 resource "aws_vpc" "ccVPC" {
-  cidr_block       = "10.0.0.0/16"
+  cidr_block       = var.vpc_cidr
   instance_tenancy = "default"
 
   tags = {
@@ -117,40 +98,97 @@ resource "aws_security_group" "allow_ssh" {
   }
 }
 
+# CloudWatch Log Group for Audit Trail
+resource "aws_cloudwatch_log_group" "audit_log_group" {
+  name              = "/aws/ec2/audit_trail"
+  retention_in_days = 90
+
+  tags = {
+    Name = "AuditTrailLogs"
+  }
+}
+
+# S3 Bucket for Artifact History
+resource "aws_s3_bucket" "artifact_history_bucket" {
+  bucket = "artifact-history-bucket-${random_id.s3_suffix.hex}"
+
+  tags = {
+    Name = "ArtifactHistory"
+  }
+}
+
+resource "random_id" "s3_suffix" {
+  byte_length = 4
+}
+
+# IAM Role for EC2 Instance
+resource "aws_iam_role" "cloudwatch_s3_role" {
+  name               = "CloudWatchS3AccessRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Effect   = "Allow"
+    }]
+  })
+}
+
+# IAM Policy for Logging to CloudWatch and Writing to S3
+resource "aws_iam_policy" "cloudwatch_s3_policy" {
+  name        = "CloudWatchS3AccessPolicy"
+  description = "Policy to allow logging to CloudWatch and writing to S3"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "logs:CreateLogGroup"
+        Effect   = "Allow"
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Action   = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:logs:*:*:log-group:/aws/ec2/audit_trail:*"
+      },
+      {
+        Action   = "s3:PutObject"
+        Effect   = "Allow"
+        Resource = "${aws_s3_bucket.artifact_history_bucket.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_policy" {
+  role       = aws_iam_role.cloudwatch_s3_role.name
+  policy_arn = aws_iam_policy.cloudwatch_s3_policy.arn
+}
+
+
 # EC2 instance in public subnet
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = "ec2_key"
   subnet_id              = aws_subnet.public_subnet.id
-   vpc_security_group_ids = [aws_security_group.allow_ssh.id]
+  vpc_security_group_ids = [aws_security_group.allow_ssh.id]
 
   root_block_device {
     volume_size = local.new_root_size
     volume_type = "gp2"
   }
-
-  user_data = <<-EOF
-              #!/bin/bash
-              sudo apt update -y && sudo apt upgrade -y
-              sudo apt install openjdk-11-jdk -y
-              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-              sudo apt install -y nodejs
-              java -version
-              node -v
-              npm -v
-              if ! file -s /dev/xvdh | grep -q 'ext4'; then
-                  sudo mkfs -t ext4 /dev/xvdh
-              fi
-              sudo mkdir -p /mnt/external_disk_1
-              sudo mount /dev/xvdh /mnt/external_disk_1
-              echo '/dev/xvdh /mnt/external_disk_1 ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
-              sudo chown -R ubuntu:ubuntu /mnt/external_disk_1
-              sudo chmod -R 755 /mnt/external_disk_1
-              EOF
+  user_data = templatefile("./user_data.sh", {
+    artifact_bucket    = aws_s3_bucket.artifact_history_bucket.bucket
+  })
 
   tags = {
-    Name = "Hello"
+    Name = "Hello_EC2"
   }
 }
 
@@ -171,17 +209,71 @@ resource "aws_volume_attachment" "ebs_attachment_1" {
   force_detach = true
 }
 
-# DynamoDB table
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "terraform-state-lock"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-  tags = {
-    Name = "TerraformLocks"
+resource "aws_iam_role" "dynamo_role" {
+  name               = "DynamoDBAccessRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Effect   = "Allow"
+      Sid      = ""
+    }]
+  })
+}
+
+resource "aws_iam_policy" "dynamo_policy" {
+  name        = "DynamoDBFullAccess"
+  description = "Provides full access to DynamoDB"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "dynamodb:*"
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "dynamo_attachment" {
+  role       = aws_iam_role.dynamo_role.name
+  policy_arn = aws_iam_policy.dynamo_policy.arn
+}
+
+resource "aws_dynamodb_table" "products" {
+  name           = "products"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "id"
+  range_key      = "barcode"
+
+  attribute {
+    name = "id"
+    type = "S"
   }
 
   attribute {
-    name = "LockID"
+    name = "barcode"
     type = "S"
+  }
+
+  attribute {
+    name = "name"
+    type = "S"
+  }
+
+  attribute {
+    name = "description"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name               = "DescriptionNamePriceIndex"
+    hash_key           = "name"
+    range_key          = "description"
+    projection_type    = "ALL"
   }
 }

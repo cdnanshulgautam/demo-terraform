@@ -1,12 +1,13 @@
 #!/bin/bash
 # Update and install necessary packages
 sudo apt update -y && sudo apt upgrade -y
-sudo apt install -y awscli openjdk-11-jdk
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-java -version
-node -v
-npm -v
+              sudo apt install -y awscli
+              sudo apt install openjdk-11-jdk -y
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt install -y nodejs
+              java -version
+              node -v
+              npm -v
 
 # Check if the external disk is formatted, format if not (lsblk)
 if ! file -s /dev/xvdh | grep -q 'ext4'; then

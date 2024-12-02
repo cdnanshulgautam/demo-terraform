@@ -53,7 +53,7 @@ output "iam_role_cloudwatch_s3" {
   value       = aws_iam_role.cloudwatch_s3_role.name
 }
 
-output "dynamodb_table_name" {
-  description = "The name of the DynamoDB table"
-  value       = aws_dynamodb_table.products.name
-}
+# output "dynamodb_table_name" {
+#   description = "The name of the DynamoDB table"
+#   value       = aws_dynamodb_table.products.name
+# }

@@ -1,0 +1,60 @@
+To Create multiple instamce at single time:
+
+main.tf>
+
+resource "aws_instance" "web" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = var.instance_type
+  count = 5  # Creates 1000 instances
+  key_name = "l2"
+  security_groups = [aws_security_group.allow_ssh.name]  # Attach the security group here
+
+
+  tags = {
+    Name = "Hello-${count.index}"
+  }
+}
+
+in terminal:
+terraform plan -var="instance_type=t2.micro" -parallelism=5
+terraform apply -var="instance_type=t2.micro" -parallelism=5
+
+------------------------------------------------------------------------------------------
+create deploy.sh file and write code
+#!/bin/bash
+
+# Record the start time
+start_time=$(date +%s)
+
+# Initialize Terraform
+terraform init
+
+# Apply the Terraform configuration
+terraform apply -auto-approve
+
+# Record the end time
+end_time=$(date +%s)
+
+# Calculate the duration
+duration=$(( end_time - start_time ))
+
+# Convert seconds to minutes and seconds
+minutes=$(( duration / 60 ))
+seconds=$(( duration % 60 ))
+
+echo "Time taken to create 1000 EC2 instances: $minutes minutes and $seconds seconds"
+------------------------------------------------------------------------------------------
+
+open git bash where main.tf and deploy.sh file
+run command
+chmod +x deploy.sh
+./deploy.sh
+
+
+Note - to create default vpc aws ec2 create-default-vpc
+
+
+
+icacls l2.pem /inheritance:r
+icacls l2.pem /grant:r yourusername:F
+icacls l2.pem /remove "Users"
